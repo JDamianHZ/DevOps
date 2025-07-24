@@ -1,0 +1,218 @@
+# Versión de la sintaxis de Docker Compose
+version: '3.8'
+
+# Sección donde se definen los servicios del proyecto
+services:
+
+  # Servicio para la base de datos PostgreSQL
+  postgres_db_prod:
+    # Nombre que tendrá el contenedor
+    container_name: postgres_prod
+
+    # Imagen de Docker que se usará (PostgreSQL oficial)
+    image: postgres:latest
+
+    # El contenedor se reiniciará automáticamente si se detiene
+    restart: always
+
+    networks:
+      - env_prod
+
+    # Mapea el puerto 5432 del contenedor al 5432 de tu máquina
+    ports:
+      - "5432:5432"
+
+    # Volúmenes para almacenar datos y archivos de inicialización
+    volumes:
+      # Carpeta local para scripts de inicialización
+      - ./dbfiles:/docker-entrypoint-initdb.d
+      # Carpeta local donde se guardan los datos de la base de datos
+      - ./postgres_data_prod:/var/lib/postgresql/data
+
+    # Variables de entorno para configurar el usuario, contraseña y nombre de la base de datos
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: qwerty
+      POSTGRES_DB: postgres
+
+  # Servicio para la base de datos PostgreSQL
+  postgres_db_prep:
+    # Nombre que tendrá el contenedor
+    container_name: postgres_prep
+
+    # Imagen de Docker que se usará (PostgreSQL oficial)
+    image: postgres:latest
+
+    # El contenedor se reiniciará automáticamente si se detiene
+    restart: always
+
+    networks:
+      - env_prep
+
+    # Mapea el puerto 4432 del contenedor al 4432 de tu máquina
+    ports:
+      - "4432:4432"
+
+    # Volúmenes para almacenar datos y archivos de inicialización
+    volumes:
+      # Carpeta local para scripts de inicialización
+      - ./dbfiles:/docker-entrypoint-initdb.d
+      # Carpeta local donde se guardan los datos de la base de datos
+      - ./postgres_data_prep:/var/lib/postgresql/data
+
+    # Variables de entorno para configurar el usuario, contraseña y nombre de la base de datos
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: qwerty
+      POSTGRES_DB: postgres
+
+  # Interfaz de administración de la base de datos
+  adminer:
+    # Nombre que tendrá el contenedor
+    container_name: adminer
+
+    # Imagen de Docker que se usará (Adminer oficial)
+    image: adminer:latest
+
+    # El contenedor se reiniciará automáticamente si se detiene
+    restart: always
+
+    # Indica que este servicio depende de que el de la base de datos esté listo primero
+    depends_on:
+      - postgres_db_prep
+    networks:
+      - env_prod
+      - env_prep
+
+    # Mapea el puerto 8080 del contenedor al 9090 de tu máquina
+    ports:
+      - "9090:8080"
+
+  # Billing app backend service
+  billingapp_back_prod:
+    # Se construye a partir del Dockerfile en ./java
+    build:
+      context: ./java
+      args:
+        JAR_FILE: "billing-0.0.3-SNAPSHOT.jar"
+        DB_PASSWORD: qwerty
+    # Nombre que tendrá el contenedor
+    container_name: billingapp_back_prod
+    # Variables de entorno para la JVM
+    environment:
+      JAVA_OPTS: "-Xms256M -Xmx512M"
+    # Depende del servicio postgres_db
+    depends_on:
+      - postgres_db_prod
+    networks:
+      - env_prod
+    # Mapea el puerto 8080
+    ports:
+      - "8080:8080"
+
+  # Billing app backend service
+  billingapp_back_prep:
+    # Se construye a partir del Dockerfile en ./java
+    build:
+      context: ./java
+      args:
+        JAR_FILE: "billing-0.0.2-SNAPSHOT.jar"
+        DB_PASSWORD: qwerty
+    # Nombre que tendrá el contenedor
+    container_name: billingapp_back_prep
+    # Variables de entorno para la JVM
+    environment:
+      JAVA_OPTS: "-Xms256M -Xmx512M"
+    # Depende del servicio postgres_db
+    depends_on:
+      - postgres_db_prep
+    networks:
+      - env_prep
+    # Mapea el puerto 7080
+    ports:
+      - "7080:7080"
+
+  # Billing app frontend service
+  billingapp_front_prod:
+    # Se construye a partir del Dockerfile en ./angular
+    build:
+      context: ./angular
+    # Nombre que tendrá el contenedor
+    container_name: billingapp_front_prod
+    # Depende del backend
+    depends_on:
+      - billingapp_back_prod
+    networks:
+      - env_prod
+    # Mapea el puerto 80
+    ports:
+      - "80:80"
+    #Despliegue
+    deploy:
+      resources:
+        limits:
+          cpus: '0.15' #15% de un CPU
+          memory: 250M  
+        reservations:
+          cpus: '0.1'
+          memory: 125M
+
+  # Billing app frontend service
+  billingapp_front_prep:
+    # Se construye a partir del Dockerfile en ./angular
+    build:
+      context: ./angular
+    # Nombre que tendrá el contenedor
+    container_name: billingapp_front_prep
+    # Depende del backend
+    depends_on:
+      - billingapp_back_prep
+    networks:
+      - env_prep
+    # Mapea el puerto 81
+    ports:
+      - "81:81"
+    #Despliegue
+    deploy:
+      resources:
+        limits:
+          cpus: '0.15' #15% de un CPU
+          memory: 250M  
+        reservations:
+          cpus: '0.1'
+          memory: 125M
+
+networks:
+  env_prod:
+    driver: bridge
+    #active ipv6
+    driver_opts:
+      com.docker.network.bridge.enable_ipv6: "true"
+    
+    #IP ADRES MANAGER
+    ipam:
+      driver: default
+      config:
+        -
+          subnet: 172.16.232.0/24
+          gateway: 172.16.232.1
+        -
+          subnet: "2001:3974:3979::/64"
+          gateway: "2001:3974:3979::1"
+
+  env_prep:
+    driver: bridge
+    #active ipv6
+    driver_opts:
+      com.docker.network.bridge.enable_ipv6: "true"
+    
+    #IP ADRES MANAGER
+    ipam:
+      driver: default
+      config:
+        -
+          subnet: 172.16.235.0/24
+          gateway: 172.16.235.1
+        -
+          subnet: "2001:3984:3989::/64"
+          gateway: "2001:3984:3989::1"

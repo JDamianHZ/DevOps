@@ -1,0 +1,96 @@
+# Versión de la sintaxis de Docker Compose
+version: '3.8'
+
+# Sección donde se definen los servicios del proyecto
+services:
+
+  # Servicio para la base de datos PostgreSQL
+  postgres_db:
+    # Nombre que tendrá el contenedor
+    container_name: postgres
+
+    # Imagen de Docker que se usará (PostgreSQL oficial)
+    image: postgres:latest
+
+    # El contenedor se reiniciará automáticamente si se detiene
+    restart: always
+
+    # Mapea el puerto 5432 del contenedor al 5432 de tu máquina
+    ports:
+      - "5432:5432"
+
+    # Volúmenes para almacenar datos y archivos de inicialización
+    volumes:
+      # Carpeta local para scripts de inicialización
+      - ./dbfiles:/docker-entrypoint-initdb.d
+      # Carpeta local donde se guardan los datos de la base de datos
+      - ./postgres_data:/var/lib/postgresql/data
+
+    # Variables de entorno para configurar el usuario, contraseña y nombre de la base de datos
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: qwerty
+      POSTGRES_DB: postgres
+
+  # Interfaz de administración de la base de datos
+  adminer:
+    # Nombre que tendrá el contenedor
+    container_name: adminer
+
+    # Imagen de Docker que se usará (Adminer oficial)
+    image: adminer:latest
+
+    # El contenedor se reiniciará automáticamente si se detiene
+    restart: always
+
+    # Indica que este servicio depende de que el de la base de datos esté listo primero
+    depends_on:
+      - postgres_db
+
+    # Mapea el puerto 8080 del contenedor al 9090 de tu máquina
+    ports:
+      - "9090:8080"
+
+  # Billing app backend service
+  billingapp_back:
+    # Se construye a partir del Dockerfile en ./java
+    build:
+      context: ./java
+      args:
+        JAR_FILE: "*.jar"
+        DB_PASSWORD: qwerty
+    # Nombre que tendrá el contenedor
+    container_name: billingapp_back
+    # Variables de entorno para la JVM
+    environment:
+      JAVA_OPTS: "-Xms256M -Xmx512M"
+    # Depende del servicio postgres_db
+    depends_on:
+      - postgres_db
+    # Mapea el puerto 8080
+    ports:
+      - "8080:8080"
+
+  # Billing app frontend service
+  billingapp_front:
+    # Se construye a partir del Dockerfile en ./angular
+    build:
+      context: ./angular
+    # Nombre que tendrá el contenedor
+    container_name: billingapp_front
+    # Depende del backend
+    depends_on:
+      - billingapp_back
+    # Mapea el puerto 80
+    ports:
+      - "80:80"
+    #Despliegue
+    deploy:
+      resources:
+        limits:
+          cpus: '0.15' #15% de un CPU
+          memory: 250M  
+        reservations:
+          cpus: '0.1'
+          memory: 125M
+    
